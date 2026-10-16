@@ -1,0 +1,185 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="quad">
+
+  <xacro:property name="body_l" value="0.40"/>
+  <xacro:property name="body_w" value="0.18"/>
+  <xacro:property name="body_h" value="0.08"/>
+  <xacro:property name="body_m" value="4.0"/>
+  <xacro:property name="L" value="0.15"/>
+  <xacro:property name="leg_r" value="0.015"/>
+  <xacro:property name="leg_m" value="0.25"/>
+  <xacro:property name="foot_r" value="0.02"/>
+  <xacro:property name="leg_ixx" value="${leg_m/12*(3*leg_r**2 + L**2)}"/>
+  <xacro:property name="leg_izz" value="${0.5*leg_m*leg_r**2}"/>
+
+  <material name="grey"><color rgba="0.5 0.5 0.55 1"/></material>
+  <material name="blue"><color rgba="0.2 0.3 0.8 1"/></material>
+  <material name="black"><color rgba="0.05 0.05 0.05 1"/></material>
+
+  <link name="base_link">
+    <visual>
+      <geometry><box size="${body_l} ${body_w} ${body_h}"/></geometry>
+      <material name="grey"/>
+    </visual>
+    <collision>
+      <geometry><box size="${body_l} ${body_w} ${body_h}"/></geometry>
+    </collision>
+    <inertial>
+      <mass value="${body_m}"/>
+      <inertia ixx="${body_m/12*(body_w**2+body_h**2)}" ixy="0" ixz="0"
+               iyy="${body_m/12*(body_l**2+body_h**2)}" iyz="0"
+               izz="${body_m/12*(body_l**2+body_w**2)}"/>
+    </inertial>
+  </link>
+
+  <link name="camera_link">
+    <visual>
+      <geometry><box size="0.03 0.05 0.03"/></geometry>
+      <material name="black"/>
+    </visual>
+    <inertial>
+      <mass value="0.05"/>
+      <inertia ixx="1e-5" ixy="0" ixz="0" iyy="1e-5" iyz="0" izz="1e-5"/>
+    </inertial>
+  </link>
+  <joint name="camera_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="camera_link"/>
+    <origin xyz="${body_l/2 + 0.015} 0 0.02" rpy="0 0 0"/>
+  </joint>
+  <gazebo reference="camera_joint">
+    <preserveFixedJoint>true</preserveFixedJoint>
+  </gazebo>
+  <gazebo reference="camera_link">
+    <sensor name="camera" type="camera">
+      <always_on>true</always_on>
+      <update_rate>15</update_rate>
+      <topic>/camera/image_raw</topic>
+      <camera>
+        <horizontal_fov>1.2</horizontal_fov>
+        <image><width>320</width><height>240</height><format>R8G8B8</format></image>
+        <clip><near>0.05</near><far>20</far></clip>
+      </camera>
+    </sensor>
+  </gazebo>
+
+  <xacro:macro name="leg" params="prefix x y">
+    <link name="${prefix}_hip">
+      <visual>
+        <geometry><box size="0.04 0.04 0.04"/></geometry>
+        <material name="blue"/>
+      </visual>
+      <collision>
+        <geometry><box size="0.04 0.04 0.04"/></geometry>
+      </collision>
+      <inertial>
+        <mass value="0.3"/>
+        <inertia ixx="1e-4" ixy="0" ixz="0" iyy="1e-4" iyz="0" izz="1e-4"/>
+      </inertial>
+    </link>
+    <joint name="${prefix}_hip_joint" type="revolute">
+      <parent link="base_link"/>
+      <child link="${prefix}_hip"/>
+      <origin xyz="${x} ${y} 0"/>
+      <axis xyz="1 0 0"/>
+      <limit lower="-0.6" upper="0.6" effort="30" velocity="10"/>
+      <dynamics damping="0.2" friction="0.0"/>
+    </joint>
+
+    <link name="${prefix}_thigh">
+      <visual>
+        <origin xyz="0 0 ${-L/2}"/>
+        <geometry><cylinder radius="${leg_r}" length="${L}"/></geometry>
+        <material name="grey"/>
+      </visual>
+      <collision>
+        <origin xyz="0 0 ${-L/2}"/>
+        <geometry><cylinder radius="${leg_r}" length="${L}"/></geometry>
+      </collision>
+      <inertial>
+        <origin xyz="0 0 ${-L/2}"/>
+        <mass value="${leg_m}"/>
+        <inertia ixx="${leg_ixx}" ixy="0" ixz="0" iyy="${leg_ixx}" iyz="0" izz="${leg_izz}"/>
+      </inertial>
+    </link>
+    <joint name="${prefix}_thigh_joint" type="revolute">
+      <parent link="${prefix}_hip"/>
+      <child link="${prefix}_thigh"/>
+      <origin xyz="0 0 0"/>
+      <axis xyz="0 1 0"/>
+      <limit lower="-1.5" upper="1.5" effort="30" velocity="10"/>
+      <dynamics damping="0.2" friction="0.0"/>
+    </joint>
+
+    <link name="${prefix}_shin">
+      <visual>
+        <origin xyz="0 0 ${-L/2}"/>
+        <geometry><cylinder radius="${leg_r}" length="${L}"/></geometry>
+        <material name="grey"/>
+      </visual>
+      <visual>
+        <origin xyz="0 0 ${-L}"/>
+        <geometry><sphere radius="${foot_r}"/></geometry>
+        <material name="black"/>
+      </visual>
+      <collision>
+        <origin xyz="0 0 ${-L}"/>
+        <geometry><sphere radius="${foot_r}"/></geometry>
+      </collision>
+      <inertial>
+        <origin xyz="0 0 ${-L/2}"/>
+        <mass value="${leg_m}"/>
+        <inertia ixx="${leg_ixx}" ixy="0" ixz="0" iyy="${leg_ixx}" iyz="0" izz="${leg_izz}"/>
+      </inertial>
+    </link>
+    <joint name="${prefix}_knee_joint" type="revolute">
+      <parent link="${prefix}_thigh"/>
+      <child link="${prefix}_shin"/>
+      <origin xyz="0 0 ${-L}"/>
+      <axis xyz="0 1 0"/>
+      <limit lower="0.0" upper="2.6" effort="30" velocity="10"/>
+      <dynamics damping="0.2" friction="0.0"/>
+    </joint>
+    <gazebo reference="${prefix}_shin">
+      <mu1>1.0</mu1>
+      <mu2>1.0</mu2>
+    </gazebo>
+  </xacro:macro>
+
+  <xacro:leg prefix="fl" x="${ body_l/2 - 0.03}" y="${ body_w/2 + 0.02}"/>
+  <xacro:leg prefix="fr" x="${ body_l/2 - 0.03}" y="${-body_w/2 - 0.02}"/>
+  <xacro:leg prefix="rl" x="${-body_l/2 + 0.03}" y="${ body_w/2 + 0.02}"/>
+  <xacro:leg prefix="rr" x="${-body_l/2 + 0.03}" y="${-body_w/2 - 0.02}"/>
+
+  <xacro:macro name="cj" params="name init">
+    <joint_name>${name}</joint_name>
+    <initial_position>${init}</initial_position>
+    <position_p_gain>80</position_p_gain>
+    <position_i_gain>0.0</position_i_gain>
+    <position_d_gain>3.0</position_d_gain>
+    <position_i_max>0.1</position_i_max>
+    <position_i_min>-0.1</position_i_min>
+    <position_cmd_max>30</position_cmd_max>
+    <position_cmd_min>-30</position_cmd_min>
+  </xacro:macro>
+  <xacro:macro name="ctrl_joints" params="prefix">
+    <xacro:cj name="${prefix}_hip_joint" init="0.0"/>
+    <xacro:cj name="${prefix}_thigh_joint" init="-0.75"/>
+    <xacro:cj name="${prefix}_knee_joint" init="1.5"/>
+  </xacro:macro>
+
+  <gazebo>
+    <plugin filename="gz-sim-joint-state-publisher-system"
+            name="gz::sim::systems::JointStatePublisher">
+      <topic>/joint_states</topic>
+    </plugin>
+    <plugin filename="gz-sim-joint-trajectory-controller-system"
+            name="gz::sim::systems::JointTrajectoryController">
+      <topic>/joint_trajectory</topic>
+      <xacro:ctrl_joints prefix="fl"/>
+      <xacro:ctrl_joints prefix="fr"/>
+      <xacro:ctrl_joints prefix="rl"/>
+      <xacro:ctrl_joints prefix="rr"/>
+    </plugin>
+  </gazebo>
+</robot>

@@ -1,0 +1,90 @@
+#!/usr/bin/env python3
+
+"""Gently oscillate the quadruped joints around the configured standing pose."""
+
+import rclpy
+from rclpy.node import Node
+from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
+
+
+class GentleJointDemo(Node):
+    # Keep this order aligned with each point's position array.
+    JOINTS = [
+        f"{leg}_{joint}_joint"
+        for leg in ("fl", "fr", "rl", "rr")
+        for joint in ("hip", "thigh", "knee")
+    ]
+    HOME = (0.0, -0.75, 1.5)
+    LEG_SIGNS = (1.0, -1.0, -1.0, 1.0)
+    HIP_SWING = 0.04
+    THIGH_SWING = 0.10
+    KNEE_SWING = 0.12
+    SEGMENT_SECONDS = 4
+    CYCLE_SECONDS = 8.5
+
+    def __init__(self):
+        super().__init__("gentle_joint_demo")
+        self.publisher = self.create_publisher(
+            JointTrajectory, "/joint_trajectory", 10
+        )
+        self.phase = 0
+        self.timer = self.create_timer(0.5, self.wait_for_bridge)
+        self.get_logger().info(
+            "Waiting for the /joint_trajectory bridge subscriber."
+        )
+
+    def wait_for_bridge(self):
+        if self.publisher.get_subscription_count() == 0:
+            return
+        self.destroy_timer(self.timer)
+        self.publish_cycle()
+        self.timer = self.create_timer(self.CYCLE_SECONDS, self.publish_cycle)
+        self.get_logger().info(
+            "Sending gentle leg trajectories on /joint_trajectory; "
+            "Ctrl-C stops this demo."
+        )
+
+    def pose(self, direction):
+        positions = []
+        for sign in self.LEG_SIGNS:
+            positions.extend(
+                (
+                    sign * direction * self.HIP_SWING,
+                    self.HOME[1] + direction * self.THIGH_SWING,
+                    self.HOME[2] - direction * self.KNEE_SWING,
+                )
+            )
+        return positions
+
+    def publish_cycle(self):
+        direction = 1.0 if self.phase % 2 == 0 else -1.0
+        trajectory = JointTrajectory()
+        trajectory.joint_names = self.JOINTS
+
+        for direction_at_point, seconds in (
+            (direction, self.SEGMENT_SECONDS),
+            (-direction, 2 * self.SEGMENT_SECONDS),
+        ):
+            point = JointTrajectoryPoint()
+            point.positions = self.pose(direction_at_point)
+            point.time_from_start.sec = seconds
+            trajectory.points.append(point)
+
+        self.publisher.publish(trajectory)
+        self.phase += 1
+
+
+def main(args=None):
+    rclpy.init(args=args)
+    node = GentleJointDemo()
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        node.destroy_node()
+        rclpy.shutdown()
+
+
+if __name__ == "__main__":
+    main()
